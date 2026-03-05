@@ -9,6 +9,7 @@ import ClassCard from "@/components/ClassCard";
 import ClassModal from "@/components/modals/ClassModal";
 import TaskModal from "@/components/modals/TaskModal";
 import ExamModal from "@/components/modals/ExamModal";
+import ClassDetailModal from "@/components/modals/ClassDetailModal";
 import NotificationBanner from "@/components/NotificationBanner";
 
 export default function DashboardPage() {
@@ -23,6 +24,7 @@ export default function DashboardPage() {
     const [classModal, setClassModal] = useState<{ open: boolean; data?: ClassWithRelations }>({ open: false });
     const [taskModal, setTaskModal] = useState<{ open: boolean; classId?: string; data?: Task }>({ open: false });
     const [examModal, setExamModal] = useState<{ open: boolean; classId?: string; data?: Exam }>({ open: false });
+    const [detailModal, setDetailModal] = useState<{ open: boolean; cls?: ClassWithRelations }>({ open: false });
     const [showNotifBanner, setShowNotifBanner] = useState(false);
     const [deleting, setDeleting] = useState<string | null>(null);
     const today = new Date();
@@ -148,6 +150,7 @@ export default function DashboardPage() {
                                             onDelete={handleDeleteClass}
                                             onAddTask={(cid) => setTaskModal({ open: true, classId: cid })}
                                             onAddExam={(cid) => setExamModal({ open: true, classId: cid })}
+                                            onClick={(c) => setDetailModal({ open: true, cls: c })}
                                         />
                                     ))}
                                 </div>
@@ -169,6 +172,7 @@ export default function DashboardPage() {
                                             onDelete={handleDeleteClass}
                                             onAddTask={(cid) => setTaskModal({ open: true, classId: cid })}
                                             onAddExam={(cid) => setExamModal({ open: true, classId: cid })}
+                                            onClick={(c) => setDetailModal({ open: true, cls: c })}
                                         />
                                     ))}
                                 </div>
@@ -193,6 +197,11 @@ export default function DashboardPage() {
                         )}
                     </>
                 )}
+            </div>
+
+            {/* ── Footer ───────────────────────────────────────────── */}
+            <div className="text-center pb-4 pt-2">
+                <p className="text-xs text-latte-300">Made by Gamsye ❤️</p>
             </div>
 
             {/* ── FAB ─────────────────────────────────────────────── */}
@@ -231,6 +240,21 @@ export default function DashboardPage() {
                 onCreate={addExam}
                 onUpdate={updateExam}
             />
+            {/* Class Detail Modal */}
+            {detailModal.cls && (
+                <ClassDetailModal
+                    open={detailModal.open}
+                    cls={detailModal.cls}
+                    onClose={() => setDetailModal({ open: false })}
+                    onEdit={(c) => { setDetailModal({ open: false }); setClassModal({ open: true, data: c }); }}
+                    onDelete={(id) => { setDetailModal({ open: false }); handleDeleteClass(id); }}
+                    onAddTask={(cid) => { setDetailModal({ open: false }); setTaskModal({ open: true, classId: cid }); }}
+                    onAddExam={(cid) => { setDetailModal({ open: false }); setExamModal({ open: true, classId: cid }); }}
+                    onUpdateTask={updateTask}
+                    onDeleteTask={deleteTask}
+                    onDeleteExam={deleteExam}
+                />
+            )}
         </div>
     );
 }

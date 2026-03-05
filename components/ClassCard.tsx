@@ -14,6 +14,7 @@ interface ClassCardProps {
     onDelete: (id: string) => void;
     onAddTask: (classId: string) => void;
     onAddExam: (classId: string) => void;
+    onClick?: (cls: ClassWithRelations) => void;
 }
 
 function formatTime(time: string): string {
@@ -40,7 +41,7 @@ function getDueBadge(dateStr: string) {
 }
 
 export default function ClassCard({
-    cls, onEdit, onDelete, onAddTask, onAddExam,
+    cls, onEdit, onDelete, onAddTask, onAddExam, onClick,
 }: ClassCardProps) {
     const [expanded, setExpanded] = useState(false);
     const [showActions, setShowActions] = useState(false);
@@ -55,7 +56,10 @@ export default function ClassCard({
             style={{ borderLeft: `4px solid ${cls.color_code}` }}
         >
             {/* ── Main Card Header ─────────────────────────────── */}
-            <div className="p-5">
+            <div
+                className="p-5 cursor-pointer active:bg-latte-50/50 transition-colors"
+                onClick={() => onClick?.(cls)}
+            >
                 <div className="flex items-start justify-between gap-3">
                     {/* Left: info */}
                     <div className="flex gap-3 items-start flex-1 min-w-0">
@@ -97,7 +101,7 @@ export default function ClassCard({
                         {/* Quick action menu */}
                         <div className="relative">
                             <button
-                                onClick={() => setShowActions((v) => !v)}
+                                onClick={(e) => { e.stopPropagation(); setShowActions((v) => !v); }}
                                 className="w-8 h-8 rounded-xl flex items-center justify-center text-latte-300 hover:text-latte-500 hover:bg-latte-50 transition-all active:scale-90"
                                 aria-label="Actions"
                             >
