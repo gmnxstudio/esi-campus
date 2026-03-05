@@ -1,0 +1,122 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── CSS Variables ─────────────────────────────────────── */
+:root {
+  --color-cream: #faf9f7;
+  --color-latte-100: #f5f0e8;
+  --color-latte-200: #e8ddd0;
+  --color-latte-400: #c8a97e;
+  --color-latte-500: #b8966a;
+  --color-latte-700: #7d6242;
+  --color-rose-soft: #f9e8e8;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --nav-height: 80px;
+}
+
+/* ── Base ──────────────────────────────────────────────── */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--color-cream);
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior-y: none;
+}
+
+/* ── Glassmorphism Utilities ───────────────────────────── */
+@layer utilities {
+  .glass {
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+  }
+
+  .glass-card {
+    background: rgba(255, 255, 255, 0.78);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(200, 169, 126, 0.18);
+    box-shadow: 0 4px 24px rgba(200, 169, 126, 0.12), 0 1px 4px rgba(0,0,0,0.04);
+  }
+
+  .glass-nav {
+    background: rgba(250, 249, 247, 0.88);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-top: 1px solid rgba(200, 169, 126, 0.15);
+  }
+
+  .latte-gradient {
+    background: linear-gradient(135deg, #f5f0e8 0%, #e8ddd0 50%, #f9e8e8 100%);
+  }
+
+  .latte-gradient-card {
+    background: linear-gradient(135deg, #faf9f7 0%, #f5f0e8 100%);
+  }
+
+  .text-gradient-latte {
+    background: linear-gradient(135deg, #b8966a, #c8a97e, #d4c5b0);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* iOS-safe padding bottom */
+  .pb-safe {
+    padding-bottom: calc(var(--nav-height) + var(--safe-bottom));
+  }
+
+  .pt-safe {
+    padding-top: var(--safe-top);
+  }
+
+  /* Shimmer loading effect */
+  .shimmer {
+    background: linear-gradient(90deg, #f0ebe2 0%, #e8ddd0 50%, #f0ebe2 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+}
+
+/* ── Scrollbar ─────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 0px;
+}
+
+/* ── Input Overrides ───────────────────────────────────── */
+input, textarea, select {
+  font-family: inherit;
+}
+
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: opacity(0.6);
+  cursor: pointer;
+}
+
+/* ── Transitions ───────────────────────────────────────── */
+.transition-all-smooth {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Modal Overlay ─────────────────────────────────────── */
+.modal-overlay {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.modal-content {
+  animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
