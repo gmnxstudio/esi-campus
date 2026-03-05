@@ -19,10 +19,7 @@ interface ClassCardProps {
 
 function formatTime(time: string): string {
     const [h, m] = time.split(":");
-    const hour = parseInt(h, 10);
-    const ampm = hour >= 12 ? "PM" : "AM";
-    const h12 = hour % 12 || 12;
-    return `${h12}:${m} ${ampm}`;
+    return `${h.padStart(2, "0")}:${m}`;
 }
 
 function hexToRgba(hex: string, alpha: number): string {
