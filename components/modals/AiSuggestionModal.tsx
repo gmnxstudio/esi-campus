@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, Loader2, Sparkles, Zap, RefreshCw } from "lucide-react";
 import { AiSuggestion, Task } from "@/lib/types";
 import { getAiSuggestions } from "@/app/actions/ai-assistant";
@@ -68,17 +68,15 @@ export default function AiSuggestionModal({ open, tasks, onClose }: AiSuggestion
         }
     }
 
-    // Auto-fetch when modal opens for the first time
-    function handleOpen() {
-        if (!suggestion && !loading) fetchSuggestion();
-    }
+    // Auto-fetch whenever the modal opens
+    useEffect(() => {
+        if (open && !suggestion && !loading) {
+            fetchSuggestion();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open]);
 
     if (!open) return null;
-
-    // Trigger fetch on first open
-    if (!suggestion && !loading && !error) {
-        fetchSuggestion();
-    }
 
     return (
         <div className="fixed inset-0 z-50 flex items-end justify-center modal-overlay" style={{ padding: '0' }}>
