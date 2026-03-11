@@ -1,10 +1,23 @@
 // ── Database types for Praishe's Campus ──────────────────
 
-// AI Plan type (returned by Gemini)
+// AI Plan type (returned by Gemini per task)
 export interface AiPlan {
     summary: string;
     steps: string[];
     estimated_time: string;
+    motivation: string;
+}
+
+// AI Agent suggestion type (holistic analysis of all tasks)
+export interface AiSuggestion {
+    overall_status: string;        // e.g. "You have 3 urgent tasks this week!"
+    priority_tasks: {
+        title: string;
+        reason: string;
+        urgency: "high" | "medium" | "low";
+    }[];
+    action_plan: string[];         // Ordered list of what to do today/this week
+    wellness_tip: string;          // Mental health / study tip
     motivation: string;
 }
 

@@ -2,8 +2,9 @@
 
 import { useAppData } from "@/hooks/useAppData";
 import TaskModal from "@/components/modals/TaskModal";
+import AiSuggestionModal from "@/components/modals/AiSuggestionModal";
 import { useState } from "react";
-import { CheckSquare, Plus, Trash2, CheckCircle } from "lucide-react";
+import { CheckSquare, Plus, Trash2, CheckCircle, Sparkles } from "lucide-react";
 import { format, parseISO, isToday, isTomorrow, isPast } from "date-fns";
 import { Task } from "@/lib/types";
 
@@ -24,6 +25,7 @@ function StatusBadge({ status }: { status: Task["status"] }) {
 export default function TasksPage() {
     const { classes, loading, addTask, updateTask, deleteTask } = useAppData();
     const [taskModal, setTaskModal] = useState<{ open: boolean; data?: Task; classId?: string }>({ open: false });
+    const [showAiModal, setShowAiModal] = useState(false);
 
     const allTasks = classes.flatMap((c) => (c.tasks ?? []).map((t) => ({ ...t, className: c.subject, classColor: c.color_code })));
     const pending = allTasks.filter((t) => t.status !== "done").sort((a, b) => a.due_date.localeCompare(b.due_date));
@@ -49,12 +51,29 @@ export default function TasksPage() {
                         <CheckSquare className="w-5 h-5 text-latte-400" strokeWidth={1.5} />
                         <h1 className="text-xl font-bold text-latte-700">Tasks</h1>
                     </div>
-                    <button
-                        onClick={() => setTaskModal({ open: true })}
-                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-latte-400 text-white text-xs font-semibold shadow-soft hover:bg-latte-500 transition-all active:scale-95"
-                    >
-                        <Plus className="w-3.5 h-3.5" /> Add Task
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {/* AI Coach Button */}
+                        <button
+                            onClick={() => setShowAiModal(true)}
+                            disabled={allTasks.length === 0}
+                            className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-semibold transition-all active:scale-95 disabled:opacity-40"
+                            style={{
+                                background: "linear-gradient(135deg, rgba(200,169,126,0.15), rgba(232,165,165,0.15))",
+                                border: "1px solid rgba(200,169,126,0.3)",
+                                color: "#b8966a"
+                            }}
+                            title="Get AI suggestions for your tasks"
+                        >
+                            <Sparkles className="w-3.5 h-3.5" /> AI Coach
+                        </button>
+                        {/* Add Task Button */}
+                        <button
+                            onClick={() => setTaskModal({ open: true })}
+                            className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-latte-400 text-white text-xs font-semibold shadow-soft hover:bg-latte-500 transition-all active:scale-95"
+                        >
+                            <Plus className="w-3.5 h-3.5" /> Add Task
+                        </button>
+                    </div>
                 </div>
                 <p className="text-sm text-latte-400 mt-1">{pending.length} pending · {done.length} done</p>
             </header>
@@ -129,6 +148,11 @@ export default function TasksPage() {
             </div>
 
             <TaskModal open={taskModal.open} classId={taskModal.classId} existing={taskModal.data} classes={classes} onClose={() => setTaskModal({ open: false })} onCreate={addTask} onUpdate={updateTask} />
+            <AiSuggestionModal
+                open={showAiModal}
+                tasks={allTasks.map(t => ({ title: t.title, description: t.description, due_date: t.due_date, status: t.status }))}
+                onClose={() => setShowAiModal(false)}
+            />
         </div>
     );
 }
