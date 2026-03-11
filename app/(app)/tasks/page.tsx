@@ -78,19 +78,26 @@ export default function TasksPage() {
                             {pending.map((task) => {
                                 const due = getDueLabel(task.due_date);
                                 return (
-                                    <div key={task.id} className="glass-card rounded-2xl px-4 py-3 flex items-center gap-3" style={{ borderLeft: `3px solid ${task.classColor}` }}>
-                                        <button onClick={() => toggleDone(task)} className="w-6 h-6 rounded-full border-2 border-latte-200 flex-shrink-0 flex items-center justify-center hover:border-latte-400 transition-all active:scale-90">
+                                    <div key={task.id}
+                                        className="glass-card rounded-2xl px-4 py-3 flex items-center gap-3 cursor-pointer active:scale-[0.98] transition-all"
+                                        style={{ borderLeft: `3px solid ${task.classColor}` }}
+                                        onClick={() => setTaskModal({ open: true, data: task })}
+                                    >
+                                        <button onClick={(e) => { e.stopPropagation(); toggleDone(task); }} className="w-6 h-6 rounded-full border-2 border-latte-200 flex-shrink-0 flex items-center justify-center hover:border-latte-400 transition-all active:scale-90">
                                             <div className="w-2.5 h-2.5 rounded-full bg-transparent" />
                                         </button>
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium text-latte-700 truncate">{task.title}</p>
+                                            <div className="flex items-center gap-1.5">
+                                                <p className="text-sm font-medium text-latte-700 truncate">{task.title}</p>
+                                                {task.ai_plan && <span className="text-[10px] flex-shrink-0" title="AI Plan available">✨</span>}
+                                            </div>
                                             <div className="flex items-center gap-2 mt-0.5">
                                                 <span className="text-xs text-latte-300">{task.className}</span>
                                                 <span className={`text-xs font-medium ${due.color}`}>· {due.label}</span>
                                             </div>
                                         </div>
                                         <StatusBadge status={task.status} />
-                                        <button onClick={() => deleteTask(task.id)} className="w-7 h-7 rounded-xl flex items-center justify-center text-latte-200 hover:text-red-400 hover:bg-red-50 transition-all active:scale-90">
+                                        <button onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }} className="w-7 h-7 rounded-xl flex items-center justify-center text-latte-200 hover:text-red-400 hover:bg-red-50 transition-all active:scale-90">
                                             <Trash2 className="w-3.5 h-3.5" />
                                         </button>
                                     </div>

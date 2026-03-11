@@ -1,5 +1,13 @@
 // ── Database types for Praishe's Campus ──────────────────
 
+// AI Plan type (returned by Gemini)
+export interface AiPlan {
+    summary: string;
+    steps: string[];
+    estimated_time: string;
+    motivation: string;
+}
+
 export interface Class {
     id: string;
     subject: string;
@@ -20,6 +28,7 @@ export interface Task {
     description: string | null;
     due_date: string;      // "YYYY-MM-DD"
     status: "pending" | "in_progress" | "done";
+    ai_plan: AiPlan | null;
     created_at: string;
     updated_at: string;
 }

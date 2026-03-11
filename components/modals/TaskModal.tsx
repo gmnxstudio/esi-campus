@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Task, ClassWithRelations } from "@/lib/types";
-import { X, Loader2 } from "lucide-react";
+import { Task, ClassWithRelations, AiPlan } from "@/lib/types";
+import { X, Loader2, Sparkles } from "lucide-react";
+import { generateTaskPlan } from "@/app/actions/ai-assistant";
 
 interface TaskModalProps {
     open: boolean;
@@ -22,10 +23,97 @@ const emptyForm = {
     status: "pending" as Task["status"],
 };
 
+// ── Magic Card: Displays AI Plan result ─────────────────────
+function AiPlanCard({ plan }: { plan: AiPlan }) {
+    return (
+        <div className="rounded-3xl overflow-hidden border border-latte-200/60 animate-slide-down" style={{
+            background: "linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(249,232,232,0.6) 50%, rgba(245,240,232,0.8) 100%)",
+            backdropFilter: "blur(20px)",
+            WebkitBackdropFilter: "blur(20px)",
+            boxShadow: "0 4px 32px rgba(200,169,126,0.15), 0 1px 4px rgba(0,0,0,0.04)"
+        }}>
+            {/* Header */}
+            <div className="px-4 pt-4 pb-2 flex items-center gap-2">
+                <span className="text-base">✨</span>
+                <p className="text-xs font-bold text-latte-600 uppercase tracking-wider">AI Study Plan</p>
+            </div>
+
+            <div className="px-4 pb-4 space-y-3">
+                {/* Summary */}
+                <div className="flex gap-2.5">
+                    <span className="text-sm mt-0.5 flex-shrink-0">📝</span>
+                    <div>
+                        <p className="text-[10px] font-bold text-latte-400 uppercase tracking-wide mb-0.5">Summary</p>
+                        <p className="text-xs text-latte-700 leading-relaxed">{plan.summary}</p>
+                    </div>
+                </div>
+
+                {/* Steps */}
+                <div className="flex gap-2.5">
+                    <span className="text-sm mt-0.5 flex-shrink-0">✅</span>
+                    <div className="flex-1">
+                        <p className="text-[10px] font-bold text-latte-400 uppercase tracking-wide mb-1.5">Steps</p>
+                        <div className="space-y-1.5">
+                            {plan.steps.map((step, i) => (
+                                <div key={i} className="flex items-start gap-2">
+                                    <span className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold text-white mt-0.5" style={{ background: "linear-gradient(135deg, #c8a97e, #e8a5a5)" }}>
+                                        {i + 1}
+                                    </span>
+                                    <p className="text-xs text-latte-700 leading-relaxed">{step}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Time & Motivation */}
+                <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-2xl p-3" style={{ background: "rgba(200,169,126,0.08)" }}>
+                        <p className="text-[10px] font-bold text-latte-400 uppercase tracking-wide mb-0.5">⏳ Est. Time</p>
+                        <p className="text-xs font-semibold text-latte-700">{plan.estimated_time}</p>
+                    </div>
+                    <div className="rounded-2xl p-3" style={{ background: "rgba(232,165,165,0.1)" }}>
+                        <p className="text-[10px] font-bold text-latte-400 uppercase tracking-wide mb-0.5">💪 You Got This</p>
+                        <p className="text-xs text-latte-600 leading-relaxed">{plan.motivation}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ── AI Loading shimmer ───────────────────────────────────────
+function AiLoadingCard() {
+    return (
+        <div className="rounded-3xl overflow-hidden border border-latte-200/60 p-4 space-y-3" style={{
+            background: "linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(249,232,232,0.5) 100%)",
+        }}>
+            <div className="flex items-center gap-2 mb-1">
+                <Sparkles className="w-3.5 h-3.5 text-latte-400 animate-pulse" />
+                <p className="text-xs font-bold text-latte-400 uppercase tracking-wider">AI is thinking...</p>
+            </div>
+            <div className="h-4 rounded-xl shimmer w-4/5" />
+            <div className="space-y-2">
+                <div className="h-3 rounded-xl shimmer w-full" />
+                <div className="h-3 rounded-xl shimmer w-5/6" />
+                <div className="h-3 rounded-xl shimmer w-4/6" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+                <div className="h-14 rounded-2xl shimmer" />
+                <div className="h-14 rounded-2xl shimmer" />
+            </div>
+        </div>
+    );
+}
+
+// ── Main Modal ───────────────────────────────────────────────
 export default function TaskModal({ open, classId, existing, classes, onClose, onCreate, onUpdate }: TaskModalProps) {
     const [form, setForm] = useState({ ...emptyForm });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
+    const [aiPlan, setAiPlan] = useState<AiPlan | null>(null);
+    const [aiLoading, setAiLoading] = useState(false);
+    const [aiError, setAiError] = useState("");
     const isEdit = !!existing;
 
     useEffect(() => {
@@ -38,8 +126,25 @@ export default function TaskModal({ open, classId, existing, classes, onClose, o
                 status: existing.status,
             } : { ...emptyForm, class_id: classId ?? classes[0]?.id ?? "" });
             setError("");
+            setAiPlan(existing?.ai_plan ?? null);
+            setAiError("");
         }
     }, [open, existing, classId, classes]);
+
+    async function handleAiPlan() {
+        if (!form.title.trim()) return;
+        setAiLoading(true);
+        setAiError("");
+        setAiPlan(null);
+        try {
+            const plan = await generateTaskPlan(form.title.trim(), form.description.trim());
+            setAiPlan(plan);
+        } catch (e: unknown) {
+            setAiError(e instanceof Error ? e.message : "Gagal menghubungi AI. Coba lagi.");
+        } finally {
+            setAiLoading(false);
+        }
+    }
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
@@ -55,6 +160,7 @@ export default function TaskModal({ open, classId, existing, classes, onClose, o
                 description: form.description.trim() || null,
                 due_date: form.due_date,
                 status: form.status,
+                ai_plan: aiPlan,
             };
             if (isEdit && existing) {
                 await onUpdate(existing.id, data);
@@ -76,7 +182,7 @@ export default function TaskModal({ open, classId, existing, classes, onClose, o
             <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
             <div
                 className="relative w-full max-w-lg bg-white rounded-4xl shadow-glass-lg modal-content flex flex-col"
-                style={{ maxHeight: '85dvh' }}
+                style={{ maxHeight: '88dvh' }}
             >
                 {/* Header */}
                 <div className="px-5 pt-2 pb-3 flex items-center justify-between flex-shrink-0">
@@ -131,6 +237,37 @@ export default function TaskModal({ open, classId, existing, classes, onClose, o
                         />
                     </div>
 
+                    {/* AI Plan Button */}
+                    <button
+                        type="button"
+                        onClick={handleAiPlan}
+                        disabled={!form.title.trim() || aiLoading}
+                        className="w-full py-3 rounded-2xl text-sm font-semibold transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        style={{
+                            background: "linear-gradient(135deg, rgba(200,169,126,0.15) 0%, rgba(232,165,165,0.15) 100%)",
+                            border: "1px solid rgba(200,169,126,0.3)",
+                            color: "#b8966a"
+                        }}
+                    >
+                        {aiLoading
+                            ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating plan...</>
+                            : <><Sparkles className="w-4 h-4" /> Rencana AI ✨</>
+                        }
+                    </button>
+
+                    {/* AI Error */}
+                    {aiError && (
+                        <p className="text-xs text-rose-500 bg-rose-50 rounded-xl px-3 py-2 border border-rose-100">
+                            ⚠️ {aiError}
+                        </p>
+                    )}
+
+                    {/* AI Loading Shimmer */}
+                    {aiLoading && <AiLoadingCard />}
+
+                    {/* AI Magic Card Result */}
+                    {aiPlan && !aiLoading && <AiPlanCard plan={aiPlan} />}
+
                     {/* Due date & Status */}
                     <div className="grid grid-cols-2 gap-3">
                         <div>
@@ -159,7 +296,7 @@ export default function TaskModal({ open, classId, existing, classes, onClose, o
                     {error && <p className="text-sm text-red-500 bg-red-50 rounded-xl px-3 py-2">{error}</p>}
                 </form>
 
-                {/* Sticky Save Button — always visible */}
+                {/* Sticky Save Button */}
                 <div className="px-5 pb-6 pt-3 border-t border-latte-100 bg-white flex-shrink-0">
                     <button
                         type="submit"

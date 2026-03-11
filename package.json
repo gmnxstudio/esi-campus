@@ -11,6 +11,7 @@
     "tunnel": "npx localtunnel --port 3000"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@supabase/ssr": "^0.5.1",
     "@supabase/supabase-js": "^2.45.4",
     "date-fns": "^4.1.0",
