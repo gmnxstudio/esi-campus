@@ -36,8 +36,11 @@ export default function DashboardPage() {
         else if (hour < 17) setGreeting("Good afternoon");
         else setGreeting("Good evening");
 
-        // Show notification banner if not granted
-        if ("Notification" in window && Notification.permission === "default") {
+        // Show banner if: permission not granted yet, OR subscription flag missing (subscription may have expired)
+        const alreadySubscribed = localStorage.getItem("notif_subscribed") === "1";
+        const permission = "Notification" in window ? Notification.permission : "default";
+
+        if (!alreadySubscribed || permission !== "granted") {
             setTimeout(() => setShowNotifBanner(true), 2000);
         }
     }, []);

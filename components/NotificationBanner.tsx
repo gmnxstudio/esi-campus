@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { Bell, X, Loader2, BellOff, ShieldAlert, WifiOff } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Bell, X, Loader2, BellOff, ShieldAlert, WifiOff, CheckCircle2 } from "lucide-react";
+
+const STORAGE_KEY = "notif_subscribed";
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
     const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -19,12 +21,53 @@ function isRunningAsStandalone(): boolean {
         (navigator as any).standalone === true;
 }
 
-type NotifStatus = "idle" | "success" | "denied" | "error" | "https_required" | "not_supported" | "ios_browser";
+type NotifStatus = "checking" | "idle" | "success" | "denied" | "error" | "https_required" | "not_supported" | "ios_browser";
 
 export default function NotificationBanner({ onDismiss }: { onDismiss: () => void }) {
     const [loading, setLoading] = useState(false);
-    const [status, setStatus] = useState<NotifStatus>("idle");
+    const [status, setStatus] = useState<NotifStatus>("checking");
     const [errorDetail, setErrorDetail] = useState("");
+
+    // On mount: check if already subscribed
+    useEffect(() => {
+        async function checkExistingSubscription() {
+            if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+                if (isIosDevice() && !isRunningAsStandalone()) {
+                    setStatus("ios_browser");
+                } else if (Notification.permission === "denied") {
+                    setStatus("denied");
+                } else {
+                    setStatus("idle");
+                }
+                return;
+            }
+
+            if (Notification.permission === "denied") {
+                setStatus("denied");
+                return;
+            }
+
+            try {
+                const reg = await navigator.serviceWorker.ready;
+                const existing = await reg.pushManager.getSubscription();
+                const savedFlag = localStorage.getItem(STORAGE_KEY);
+
+                if (existing && savedFlag === "1") {
+                    // Already subscribed — show success state & auto-dismiss
+                    setStatus("success");
+                    setTimeout(onDismiss, 1500);
+                } else {
+                    // Subscription lost or never saved — reset flag & prompt again
+                    localStorage.removeItem(STORAGE_KEY);
+                    setStatus("idle");
+                }
+            } catch {
+                setStatus("idle");
+            }
+        }
+        checkExistingSubscription();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     async function subscribeToNotifications() {
         setLoading(true);
@@ -82,10 +125,12 @@ export default function NotificationBanner({ onDismiss }: { onDismiss: () => voi
             });
 
             if (response.ok) {
+                localStorage.setItem(STORAGE_KEY, "1");
                 setStatus("success");
                 setTimeout(onDismiss, 2500);
             } else {
                 const err = await response.json().catch(() => ({}));
+                localStorage.removeItem(STORAGE_KEY);
                 setErrorDetail(err.error ?? "Server error");
                 setStatus("error");
             }
@@ -108,6 +153,13 @@ export default function NotificationBanner({ onDismiss }: { onDismiss: () => voi
     };
 
     const content: ContentDef = {
+        checking: {
+            icon: <Loader2 className="w-5 h-5 text-latte-300 animate-spin" />,
+            title: "Checking...",
+            desc: "Checking notification status...",
+            cta: null,
+            ctaClass: "",
+        },
         idle: {
             icon: <Bell className="w-5 h-5 text-latte-400" strokeWidth={1.5} />,
             title: "Enable Notifications",
@@ -116,9 +168,9 @@ export default function NotificationBanner({ onDismiss }: { onDismiss: () => voi
             ctaClass: "bg-latte-400 text-white hover:bg-latte-500",
         },
         success: {
-            icon: <span className="text-xl">🎉</span>,
-            title: "Notifications Enabled!",
-            desc: "Your Guardian is watching over you. You'll never miss a class again.",
+            icon: <CheckCircle2 className="w-5 h-5 text-green-400" />,
+            title: "Notifications Active!",
+            desc: "Your Guardian is watching over you. You'll never miss a class again 🌸",
             cta: null,
             ctaClass: "",
         },
