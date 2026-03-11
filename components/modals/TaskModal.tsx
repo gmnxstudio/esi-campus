@@ -137,8 +137,12 @@ export default function TaskModal({ open, classId, existing, classes, onClose, o
         setAiError("");
         setAiPlan(null);
         try {
-            const plan = await generateTaskPlan(form.title.trim(), form.description.trim());
-            setAiPlan(plan);
+            const response = await generateTaskPlan(form.title.trim(), form.description.trim());
+            if (response.success) {
+                setAiPlan(response.data);
+            } else {
+                setAiError(response.error);
+            }
         } catch (e: unknown) {
             setAiError(e instanceof Error ? e.message : "Gagal menghubungi AI. Coba lagi.");
         } finally {

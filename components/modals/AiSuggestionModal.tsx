@@ -59,8 +59,12 @@ export default function AiSuggestionModal({ open, tasks, onClose }: AiSuggestion
         setError("");
         setSuggestion(null);
         try {
-            const result = await getAiSuggestions(tasks);
-            setSuggestion(result);
+            const response = await getAiSuggestions(tasks);
+            if (response.success) {
+                setSuggestion(response.data);
+            } else {
+                setError(response.error);
+            }
         } catch (e: unknown) {
             setError(e instanceof Error ? e.message : "Gagal menghubungi AI. Coba lagi.");
         } finally {

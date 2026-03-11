@@ -6,10 +6,10 @@ import { AiPlan, AiSuggestion, Task } from "@/lib/types";
 export async function generateTaskPlan(
     title: string,
     description: string
-): Promise<AiPlan> {
+): Promise<{ success: true; data: AiPlan } | { success: false; error: string }> {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-        throw new Error("GEMINI_API_KEY belum dikonfigurasi.");
+        return { success: false, error: "GEMINI_API_KEY belum dikonfigurasi." };
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
@@ -51,35 +51,35 @@ Rules:
             typeof parsed.estimated_time !== "string" ||
             typeof parsed.motivation !== "string"
         ) {
-            throw new Error("AI returned unexpected format.");
+            return { success: false, error: "AI returned unexpected format." };
         }
 
-        return parsed;
+        return { success: true, data: parsed };
     } catch (e: unknown) {
         if (e instanceof SyntaxError) {
-            throw new Error("AI tidak dapat memproses permintaan. Coba lagi.");
+            return { success: false, error: "AI tidak dapat memproses permintaan. Coba lagi." };
         }
         const msg = e instanceof Error ? e.message : "Unknown error";
         // Re-throw user-friendly messages
         if (msg.includes("quota") || msg.includes("429")) {
-            throw new Error("Batas penggunaan AI tercapai. Coba beberapa saat lagi.");
+            return { success: false, error: "Batas penggunaan AI tercapai. Coba beberapa saat lagi." };
         }
         if (msg.includes("API key")) {
-            throw new Error("Konfigurasi AI bermasalah. Hubungi admin.");
+            return { success: false, error: "Konfigurasi AI bermasalah. Hubungi admin." };
         }
-        throw new Error(msg || "Gagal menghasilkan rencana AI. Coba lagi.");
+        return { success: false, error: msg || "Gagal menghasilkan rencana AI. Coba lagi." };
     }
 }
 
 // ── AI Agent: Holistic Task Analysis ─────────────────────────────────────────
 export async function getAiSuggestions(
     tasks: Pick<Task, "title" | "description" | "due_date" | "status">[]
-): Promise<AiSuggestion> {
+): Promise<{ success: true; data: AiSuggestion } | { success: false; error: string }> {
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("GEMINI_API_KEY belum dikonfigurasi.");
+    if (!apiKey) return { success: false, error: "GEMINI_API_KEY belum dikonfigurasi." };
 
     if (tasks.length === 0) {
-        throw new Error("Tidak ada task untuk dianalisis. Tambahkan task terlebih dahulu!");
+        return { success: false, error: "Tidak ada task untuk dianalisis. Tambahkan task terlebih dahulu!" };
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
@@ -136,14 +136,14 @@ Rules:
             typeof parsed.wellness_tip !== "string" ||
             typeof parsed.motivation !== "string"
         ) {
-            throw new Error("Format respons AI tidak valid.");
+            return { success: false, error: "Format respons AI tidak valid." };
         }
 
-        return parsed;
+        return { success: true, data: parsed };
     } catch (e: unknown) {
-        if (e instanceof SyntaxError) throw new Error("AI tidak dapat memproses. Coba lagi.");
+        if (e instanceof SyntaxError) return { success: false, error: "AI tidak dapat memproses. Coba lagi." };
         const msg = e instanceof Error ? e.message : "Unknown error";
-        if (msg.includes("quota") || msg.includes("429")) throw new Error("Batas AI tercapai. Coba beberapa saat lagi.");
-        throw new Error(msg || "Gagal menghubungi AI. Coba lagi.");
+        if (msg.includes("quota") || msg.includes("429")) return { success: false, error: "Batas AI tercapai. Coba beberapa saat lagi." };
+        return { success: false, error: msg || "Gagal menghubungi AI. Coba lagi." };
     }
 }
