@@ -1,15 +1,14 @@
 -- Drop the table and policies if they exist to allow clean re-running of this script
 DROP TABLE IF EXISTS public.user_locations CASCADE;
 
--- 1. Create the user_locations table
+-- 1. Create the user_locations table (No FOREIGN KEY since users are anonymous)
 CREATE TABLE public.user_locations (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL,
   latitude double precision NOT NULL,
   longitude double precision NOT NULL,
   last_updated timestamp with time zone NULL DEFAULT now(),
-  CONSTRAINT user_locations_pkey PRIMARY KEY (id),
-  CONSTRAINT user_locations_user_id_fkey FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE
+  CONSTRAINT user_locations_pkey PRIMARY KEY (id)
 );
 
 -- 2. Add an index to make upserts work for user_id (unique per user tracking)
@@ -23,17 +22,17 @@ ALTER TABLE public.user_locations ENABLE ROW LEVEL SECURITY;
 
 -- 4. Policies
 
--- Allow authenticated users to insert/update their own location
-CREATE POLICY "Users can insert their own location" 
+-- Allow anonymous PWA users to insert/update location 
+CREATE POLICY "Anon users can insert location" 
 ON public.user_locations FOR INSERT 
-TO authenticated 
-WITH CHECK (auth.uid() = user_id);
+TO public
+WITH CHECK (true);
 
-CREATE POLICY "Users can update their own location" 
+CREATE POLICY "Anon users can update location" 
 ON public.user_locations FOR UPDATE 
-TO authenticated 
-USING (auth.uid() = user_id) 
-WITH CHECK (auth.uid() = user_id);
+TO public
+USING (true) 
+WITH CHECK (true);
 
 -- Allow anyone to read all locations since only the admin accesses the website
 CREATE POLICY "Anyone can read all locations"

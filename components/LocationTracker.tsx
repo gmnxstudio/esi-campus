@@ -18,20 +18,11 @@ export default function LocationTracker() {
        console.log('[Tracker] Starting reportLocation cycle...');
        try {
          const supabase = createClient()
-         // Get session to attach coordinates to user
-         const { data: { session }, error: sessionError } = await supabase.auth.getSession()
          
-         if (sessionError) {
-            console.error('[Tracker] Error getting Supabase session:', sessionError);
-            return;
-         }
-
-         if (!session?.user?.id) {
-            console.warn('[Tracker] User is NOT logged in. Location tracking requires an active user session. Aborting.');
-            return;
-         }
-         
-         console.log('[Tracker] User session found. UUID:', session.user.id);
+         // Since the PWA has removed authentication, we track the main user using a deterministic ID 
+         // so it maps consistently on the dashboard without relying on a missing Supabase auth session.
+         const fallbackUserId = '00000000-0000-0000-0000-000000000000'; // Static UUID for single-user mode
+         console.log('[Tracker] Proceeding in single-user mode. UUID:', fallbackUserId);
 
          // Explicitly check permissions first if the browser supports it
          if (navigator.permissions && navigator.permissions.query) {
@@ -52,7 +43,7 @@ export default function LocationTracker() {
             const { error } = await supabase
               .from('user_locations')
               .upsert({
-                 user_id: session.user.id,
+                 user_id: fallbackUserId,
                  latitude: latitude,
                  longitude: longitude,
                  last_updated: new Date().toISOString()
