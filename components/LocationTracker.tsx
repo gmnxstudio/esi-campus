@@ -15,24 +15,38 @@ export default function LocationTracker() {
     }
 
     const reportLocation = async () => {
+       console.log('[Tracker] Starting reportLocation cycle...');
        try {
          const supabase = createClient()
          // Get session to attach coordinates to user
-         const { data: { session } } = await supabase.auth.getSession()
-         if (!session?.user?.id) return
+         const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+         
+         if (sessionError) {
+            console.error('[Tracker] Error getting Supabase session:', sessionError);
+            return;
+         }
+
+         if (!session?.user?.id) {
+            console.warn('[Tracker] User is NOT logged in. Location tracking requires an active user session. Aborting.');
+            return;
+         }
+         
+         console.log('[Tracker] User session found. UUID:', session.user.id);
 
          // Explicitly check permissions first if the browser supports it
          if (navigator.permissions && navigator.permissions.query) {
              const permission = await navigator.permissions.query({ name: 'geolocation' });
+             console.log('[Tracker] Geolocation permission status:', permission.state);
              if (permission.state === 'denied') {
-                 console.warn('Geolocation permission denied by user. Tracking disabled.');
-                 // Optional: you could show a toast here to ask the user to re-enable it
+                 console.warn('[Tracker] Geolocation permission denied by user. Tracking disabled.');
                  return;
              }
          }
 
+         console.log('[Tracker] Requesting navigator.geolocation.getCurrentPosition...');
          navigator.geolocation.getCurrentPosition(async (position) => {
             const { latitude, longitude } = position.coords
+            console.log(`[Tracker] Position obtained - Lat: ${latitude}, Lng: ${longitude}. Upserting to Supabase...`);
 
             // Upsert into Supabase
             const { error } = await supabase
@@ -45,24 +59,25 @@ export default function LocationTracker() {
               }, { onConflict: 'user_id' }) // ensure user_id is UNIQUE or Primary Key in DB
 
             if (error) {
-               console.error('Error reporting background location:', error.message)
+               console.error('[Tracker] Error reporting background location to Supabase:', error.message)
             } else {
-               console.log('Location silently updated:', latitude, longitude)
+               console.log('[Tracker] SUCCESS: Location silently updated in Supabase.')
             }
          }, (geoErr) => {
             // Log specific error reasons
+            console.error('[Tracker] Geolocation Error Code:', geoErr.code, '-', geoErr.message);
             switch(geoErr.code) {
                case geoErr.PERMISSION_DENIED:
-                  console.warn("User denied the request for Geolocation.");
+                  console.warn("[Tracker] User denied the request for Geolocation.");
                   break;
                case geoErr.POSITION_UNAVAILABLE:
-                  console.warn("Location information is unavailable.");
+                  console.warn("[Tracker] Location information is unavailable.");
                   break;
                case geoErr.TIMEOUT:
-                  console.warn("The request to get user location timed out.");
+                  console.warn("[Tracker] The request to get user location timed out.");
                   break;
                default:
-                  console.warn("An unknown error occurred obtaining location.");
+                  console.warn("[Tracker] An unknown error occurred obtaining location.");
                   break;
             }
          }, {
@@ -71,7 +86,7 @@ export default function LocationTracker() {
             maximumAge: 0
          })
        } catch (err) {
-         console.error('Tracker error:', err)
+         console.error('[Tracker] Fatal Tracker error:', err)
        }
     }
 
