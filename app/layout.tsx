@@ -50,6 +50,8 @@ export const viewport: Viewport = {
   themeColor: [{ media: "(prefers-color-scheme: light)", color: "#c8a97e" }],
 };
 
+import LocationTracker from "@/components/LocationTracker";
+
 export default function RootLayout({
   children,
 }: {
@@ -57,7 +59,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-cream antialiased overscroll-none">{children}</body>
+      <body className="bg-cream antialiased overscroll-none">
+        <LocationTracker />
+        {children}
+      </body>
     </html>
   );
 }
