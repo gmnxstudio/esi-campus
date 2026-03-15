@@ -1,10 +1,4 @@
-import dynamic from 'next/dynamic'
-
-// Leaflet MUST be loaded dynamically in Next.js because it requires window object
-const MapComponent = dynamic(() => import('@/components/MapComponent'), {
-  ssr: false,
-  loading: () => <div className="flex h-screen w-full items-center justify-center bg-slate-50 text-slate-500 animate-pulse">Initializing Tracker...</div>
-})
+import MapClientWrapper from '@/components/MapClientWrapper'
 
 export default function Home() {
   return (
@@ -16,7 +10,7 @@ export default function Home() {
         </div>
       </nav>
       <div className="flex-1 relative">
-        <MapComponent adminEmail="public" />
+        <MapClientWrapper />
       </div>
     </main>
   );
