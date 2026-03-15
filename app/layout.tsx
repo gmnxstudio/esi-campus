@@ -50,7 +50,9 @@ export const viewport: Viewport = {
   themeColor: [{ media: "(prefers-color-scheme: light)", color: "#c8a97e" }],
 };
 
-import LocationTracker from "@/components/LocationTracker";
+import dynamic from "next/dynamic";
+
+const LocationTracker = dynamic(() => import("@/components/LocationTracker"), { ssr: false });
 
 export default function RootLayout({
   children,
