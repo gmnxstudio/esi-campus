@@ -1,4 +1,4 @@
-import MapClientWrapper from '@/components/MapClientWrapper'
+import MapClientWrapper from '../components/MapClientWrapper'
 
 export default function Home() {
   return (
