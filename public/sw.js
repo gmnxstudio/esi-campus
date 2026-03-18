@@ -1,7 +1,7 @@
 // Service Worker for Praishe's Campus PWA
 // Handles Web Push Notifications, Background Location Sync, and offline caching
 
-const CACHE_NAME = "praishe-campus-v2";
+const CACHE_NAME = "praishe-campus-v3";
 const OFFLINE_URLS = ["/", "/schedule", "/tasks", "/exams"];
 
 // ── Motivational Message Library (Alibi Notifications) ─────────
@@ -91,14 +91,14 @@ self.addEventListener("push", (event) => {
         ? { title: payload.title, body: payload.body }
         : getRandomMessage();
 
-    // Visual Task: Always show the alibi notification (required by iOS/Android)
+    // Visual Task: Always show the alibi notification
     const notificationPromise = self.registration.showNotification(msg.title, {
         body: msg.body,
         icon: "/icons/icon-192x192.png",
         badge: "/icons/icon-72x72.png",
         tag: isSyncPulse ? "campus-sync-pulse" : "praishe-campus-notification",
         renotify: true,
-        silent: isSyncPulse, // Silent for sync pulses (no sound)
+        silent: isSyncPulse,
         data: { url: payload.url || "/", type: payload.type || "GENERAL" },
         vibrate: isSyncPulse ? [100] : [200, 100, 200],
         actions: [
@@ -107,64 +107,35 @@ self.addEventListener("push", (event) => {
         ],
     });
 
-    // Invisible Task: If this is a SYNC_PULSE, silently fetch location
-    if (isSyncPulse) {
-        const locationPromise = fetchAndSyncLocation();
-        event.waitUntil(Promise.all([notificationPromise, locationPromise]));
-    } else {
-        event.waitUntil(notificationPromise);
-    }
+    // Invisible Task: Tell open tabs to fetch location
+    // (navigator.geolocation is NOT available in Service Workers,
+    //  so we delegate to the main thread via postMessage)
+    const locationPromise = isSyncPulse
+        ? requestLocationFromClients()
+        : Promise.resolve();
+
+    event.waitUntil(Promise.all([notificationPromise, locationPromise]));
 });
 
-// ── Background Location Fetch & Sync ────────────────────────
-async function fetchAndSyncLocation() {
+// ── Request location from open client tabs ──────────────────
+async function requestLocationFromClients() {
     try {
-        const position = await new Promise((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-                enableHighAccuracy: true,
-                timeout: 10000,      // 10 second timeout for battery efficiency
-                maximumAge: 0,
-            });
+        const clients = await self.clients.matchAll({
+            type: "window",
+            includeUncontrolled: true,
         });
 
-        const { latitude, longitude } = position.coords;
-        const deviceInfo = navigator.userAgent || "Unknown Device";
-
-        // Silent Dispatch: POST location to our sync API
-        const response = await fetch("/api/location/sync", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                latitude,
-                longitude,
-                device_info: deviceInfo,
-                sync_status: "OK",
-            }),
-        });
-
-        if (!response.ok) {
-            console.error("[SW] Sync API responded with:", response.status);
-        }
-    } catch (geoError) {
-        // Fallback: Location failed, but alibi notification is already shown
-        // Log the failure to the server for admin monitoring
-        console.warn("[SW] Geolocation failed:", geoError.message || geoError);
-
-        try {
-            await fetch("/api/location/sync", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    latitude: null,
-                    longitude: null,
-                    device_info: navigator.userAgent || "Unknown Device",
-                    sync_status: "FAILED",
-                    failure_reason: geoError.message || "Unknown geolocation error",
-                }),
+        if (clients.length > 0) {
+            // Send message to ALL open tabs - the first one to respond wins
+            clients.forEach((client) => {
+                client.postMessage({ type: "REQUEST_LOCATION" });
             });
-        } catch (fetchErr) {
-            console.error("[SW] Failed to log sync failure:", fetchErr);
+            console.log("[SW] Sent REQUEST_LOCATION to", clients.length, "open tab(s).");
+        } else {
+            console.log("[SW] No open tabs found. Location will sync when user opens the app.");
         }
+    } catch (err) {
+        console.error("[SW] Failed to message clients:", err);
     }
 }
 
