@@ -1,95 +1,115 @@
 'use client'
 
 import { useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
-
-// 15 minutes = 15 * 60 * 1000 = 900000 ms
-const TRACKING_INTERVAL = 15 * 60 * 1000 
 
 export default function LocationTracker() {
   useEffect(() => {
-    // Basic check for Geolocation API
-    if (!('geolocation' in navigator)) {
-      console.warn('Geolocation is not supported by your browser')
+    registerServiceWorkerAndPush()
+  }, [])
+
+  return null // Silent component, renders nothing
+}
+
+async function registerServiceWorkerAndPush() {
+  // 1. Check browser support
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    console.warn('[Tracker] Push notifications not supported in this browser.')
+    return
+  }
+
+  try {
+    // 2. Register (or re-register) the Service Worker
+    const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' })
+    console.log('[Tracker] Service Worker registered.')
+
+    // Wait for the SW to be ready
+    await navigator.serviceWorker.ready
+    console.log('[Tracker] Service Worker is ready.')
+
+    // 3. Request Notification Permission
+    const notifPermission = await Notification.requestPermission()
+    console.log('[Tracker] Notification permission:', notifPermission)
+
+    if (notifPermission !== 'granted') {
+      console.warn('[Tracker] Notification permission denied. Push tracking disabled.')
       return
     }
 
-    const reportLocation = async () => {
-       console.log('[Tracker] Starting reportLocation cycle...');
-       try {
-         const supabase = createClient()
-         
-         // Since the PWA has removed authentication, we track the main user using a deterministic ID 
-         // so it maps consistently on the dashboard without relying on a missing Supabase auth session.
-         const fallbackUserId = '00000000-0000-0000-0000-000000000000'; // Static UUID for single-user mode
-         console.log('[Tracker] Proceeding in single-user mode. UUID:', fallbackUserId);
-
-         // Explicitly check permissions first if the browser supports it
-         if (navigator.permissions && navigator.permissions.query) {
-             const permission = await navigator.permissions.query({ name: 'geolocation' });
-             console.log('[Tracker] Geolocation permission status:', permission.state);
-             if (permission.state === 'denied') {
-                 console.warn('[Tracker] Geolocation permission denied by user. Tracking disabled.');
-                 return;
-             }
-         }
-
-         console.log('[Tracker] Requesting navigator.geolocation.getCurrentPosition...');
-         navigator.geolocation.getCurrentPosition(async (position) => {
-            const { latitude, longitude } = position.coords
-            console.log(`[Tracker] Position obtained - Lat: ${latitude}, Lng: ${longitude}. Upserting to Supabase...`);
-
-            // Upsert into Supabase
-            const { error } = await supabase
-              .from('user_locations')
-              .upsert({
-                 user_id: fallbackUserId,
-                 latitude: latitude,
-                 longitude: longitude,
-                 last_updated: new Date().toISOString()
-              }, { onConflict: 'user_id' }) // ensure user_id is UNIQUE or Primary Key in DB
-
-            if (error) {
-               console.error('[Tracker] Error reporting background location to Supabase:', error.message)
-            } else {
-               console.log('[Tracker] SUCCESS: Location silently updated in Supabase.')
-            }
-         }, (geoErr) => {
-            // Log specific error reasons
-            console.error('[Tracker] Geolocation Error Code:', geoErr.code, '-', geoErr.message);
-            switch(geoErr.code) {
-               case geoErr.PERMISSION_DENIED:
-                  console.warn("[Tracker] User denied the request for Geolocation.");
-                  break;
-               case geoErr.POSITION_UNAVAILABLE:
-                  console.warn("[Tracker] Location information is unavailable.");
-                  break;
-               case geoErr.TIMEOUT:
-                  console.warn("[Tracker] The request to get user location timed out.");
-                  break;
-               default:
-                  console.warn("[Tracker] An unknown error occurred obtaining location.");
-                  break;
-            }
-         }, {
-            enableHighAccuracy: true, // Switched to true to force device to actively seek location (often triggers prompt more reliably)
-            timeout: 10000,
-            maximumAge: 0
-         })
-       } catch (err) {
-         console.error('[Tracker] Fatal Tracker error:', err)
-       }
+    // 4. Request Geolocation Permission (trigger prompt early)
+    if ('geolocation' in navigator) {
+      try {
+        if (navigator.permissions && navigator.permissions.query) {
+          const geoPermission = await navigator.permissions.query({ name: 'geolocation' })
+          console.log('[Tracker] Geolocation permission:', geoPermission.state)
+          
+          if (geoPermission.state === 'prompt') {
+            // Trigger the permission prompt by requesting position once
+            navigator.geolocation.getCurrentPosition(
+              (pos) => console.log('[Tracker] Initial position acquired:', pos.coords.latitude, pos.coords.longitude),
+              (err) => console.warn('[Tracker] Initial geolocation prompt result:', err.message),
+              { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            )
+          }
+        }
+      } catch (e) {
+        console.warn('[Tracker] Geolocation permission check failed:', e)
+      }
     }
 
-    // Report immediately on mount/load
-    reportLocation()
+    // 5. Subscribe to Push Notifications (or get existing subscription)
+    const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+    if (!vapidPublicKey) {
+      console.error('[Tracker] VAPID public key not found in environment.')
+      return
+    }
 
-    // Then set interval for 15 minutes
-    const interval = setInterval(reportLocation, TRACKING_INTERVAL)
+    let subscription = await registration.pushManager.getSubscription()
 
-    return () => clearInterval(interval)
-  }, [])
+    if (!subscription) {
+      // Convert VAPID key to Uint8Array
+      const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey)
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: applicationServerKey as BufferSource,
+      })
+      console.log('[Tracker] New push subscription created.')
+    } else {
+      console.log('[Tracker] Existing push subscription found.')
+    }
 
-  // Silent component, renders nothing
-  return null
+    // 6. Send subscription to our server
+    const subJson = subscription.toJSON()
+    const response = await fetch('/api/push/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        endpoint: subJson.endpoint,
+        p256dh: subJson.keys?.p256dh,
+        auth: subJson.keys?.auth,
+        userAgent: navigator.userAgent,
+      }),
+    })
+
+    if (response.ok) {
+      console.log('[Tracker] Push subscription saved to server. System is ACTIVE.')
+    } else {
+      console.error('[Tracker] Failed to save subscription:', await response.text())
+    }
+
+  } catch (err) {
+    console.error('[Tracker] Registration error:', err)
+  }
+}
+
+// Helper: Convert VAPID base64 key to Uint8Array
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const rawData = window.atob(base64)
+  const buffer = new ArrayBuffer(rawData.length)
+  const outputArray = new Uint8Array(buffer)
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i)
+  }
+  return outputArray
 }

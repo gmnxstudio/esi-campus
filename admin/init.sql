@@ -7,6 +7,7 @@ CREATE TABLE public.user_locations (
   user_id uuid NOT NULL,
   latitude double precision NOT NULL,
   longitude double precision NOT NULL,
+  device_info text,
   last_updated timestamp with time zone NULL DEFAULT now(),
   CONSTRAINT user_locations_pkey PRIMARY KEY (id)
 );
@@ -42,3 +43,30 @@ USING (true);
 
 -- 5. Add REALTIME to the table
 ALTER PUBLICATION supabase_realtime ADD TABLE user_locations;
+
+-- ═══════════════════════════════════════════════════════════════════
+-- 6. Location History Table (V3 - Logs every sync pulse)
+-- ═══════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS public.location_history (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id uuid NOT NULL,
+  latitude double precision NOT NULL DEFAULT 0,
+  longitude double precision NOT NULL DEFAULT 0,
+  device_info text,
+  sync_status text DEFAULT 'OK',
+  failure_reason text,
+  recorded_at timestamptz DEFAULT now()
+);
+
+CREATE INDEX idx_location_history_user_time 
+  ON public.location_history (user_id, recorded_at DESC);
+
+ALTER TABLE public.location_history ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public insert history" 
+  ON public.location_history FOR INSERT TO public WITH CHECK (true);
+
+CREATE POLICY "Public read history" 
+  ON public.location_history FOR SELECT TO public USING (true);
+
