@@ -31,90 +31,115 @@ type HistoryPoint = {
   recorded_at: string
 }
 
+// ── Helper: Human-readable device name ──────────────────────
+function getDeviceName(ua: string | null): string {
+  if (!ua) return 'Unknown Device'
+  if (ua.includes('iPhone')) return '📱 iPhone'
+  if (ua.includes('iPad')) return '📱 iPad'
+  if (ua.includes('Android')) {
+    // Try to extract model name
+    const match = ua.match(/;\s*([^;)]+)\s*Build/)
+    return match ? `📱 ${match[1].trim()}` : '📱 Android'
+  }
+  if (ua.includes('Windows')) return '💻 Windows PC'
+  if (ua.includes('Macintosh')) return '💻 Mac'
+  if (ua.includes('Linux')) return '💻 Linux'
+  return '🌐 Web Browser'
+}
+
+// ── Helper: Time ago (friendly format) ──────────────────────
+function timeAgo(dateStr: string): string {
+  const minutes = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000)
+  if (minutes < 1) return 'Baru saja'
+  if (minutes < 60) return `${minutes} menit lalu`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} jam ${minutes % 60} menit lalu`
+  return `${Math.floor(hours / 24)} hari lalu`
+}
+
 // ── Smart Popup with Reverse Geocoding ──────────────────────
 function SmartPopup({ loc, historyCount }: { loc: UserLocation; historyCount: number }) {
-  const [address, setAddress] = useState<string>('Loading address...')
+  const [address, setAddress] = useState<string>('Memuat alamat...')
 
   useEffect(() => {
     const fetchAddress = async () => {
       try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${loc.latitude}&lon=${loc.longitude}`, {
-          headers: { 'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7' }
-        })
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${loc.latitude}&lon=${loc.longitude}&zoom=18&addressdetails=1`,
+          { headers: { 'Accept-Language': 'id-ID,id;q=0.9,en;q=0.5' } }
+        )
         const data = await res.json()
-        setAddress(data?.display_name || 'Address not found')
+        setAddress(data?.display_name || 'Alamat tidak ditemukan')
       } catch {
-        setAddress('Unable to fetch address')
+        setAddress('Gagal memuat alamat')
       }
     }
     fetchAddress()
   }, [loc.latitude, loc.longitude])
 
-  const getDeviceName = (ua: string | null) => {
-    if (!ua) return 'Unknown Device'
-    if (ua.includes('iPhone')) return 'iPhone Safari'
-    if (ua.includes('iPad')) return 'iPad Safari'
-    if (ua.includes('Android')) return 'Android Device'
-    if (ua.includes('Windows')) return 'Windows PC'
-    if (ua.includes('Macintosh')) return 'Macbook / iMac'
-    return 'Web Browser'
-  }
-
-  const timeAgoMinutes = Math.floor((Date.now() - new Date(loc.last_updated).getTime()) / 60000)
+  const minutes = Math.floor((Date.now() - new Date(loc.last_updated).getTime()) / 60000)
 
   return (
     <Popup>
-      <div className="p-1 min-w-[220px]">
-        {/* Header */}
-        <div className="flex items-center gap-2 mb-3 border-b border-slate-100 pb-2">
-          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs">
-            {loc.user_id.substring(0, 2).toUpperCase()}
-          </div>
-          <div>
-             <p className="font-bold text-sm text-slate-800 leading-tight">User</p>
-             <p className="text-[10px] text-slate-500 font-medium">
+      <div className="p-2 min-w-[240px] max-w-[300px]" style={{ fontFamily: "'Inter', sans-serif" }}>
+        {/* Title Row */}
+        <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-[10px] shadow-sm">
+              {loc.user_id.substring(0, 2).toUpperCase()}
+            </div>
+            <div>
+              <p className="font-bold text-[13px] text-slate-800 leading-tight">
+                Device #{loc.user_id.split('-')[0]}
+              </p>
+              <p className="text-[10px] text-slate-400 font-medium mt-0.5">
                 {new Date(loc.last_updated).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
-             </p>
+              </p>
+            </div>
           </div>
-          <div className="ml-auto">
-            <span className={`inline-block w-2.5 h-2.5 rounded-full ${timeAgoMinutes < 20 ? 'bg-green-500' : timeAgoMinutes < 60 ? 'bg-yellow-500' : 'bg-red-400'}`}></span>
-          </div>
+          <span className={`w-3 h-3 rounded-full ring-2 ring-white shadow-sm ${
+            minutes < 20 ? 'bg-green-500' : minutes < 60 ? 'bg-yellow-400' : 'bg-red-400'
+          }`}></span>
         </div>
 
-        {/* Details */}
-        <div className="space-y-2 text-xs text-slate-600">
-           <div className="flex items-start gap-2">
-              <span className="text-slate-400 mt-0.5">📍</span>
-              <span className="flex-1 font-medium text-slate-700 leading-tight">{address}</span>
-           </div>
-           
-           <div className="flex items-start gap-2">
-              <span className="text-slate-400 mt-0.5">💻</span>
-              <div className="flex-1">
-                 <span className="font-medium text-slate-700 block">{getDeviceName(loc.device_info)}</span>
-                 <span className="text-[9px] text-slate-400 block truncate max-w-[180px]" title={loc.device_info || ''}>
-                    {loc.device_info || 'No device data'}
-                 </span>
-              </div>
-           </div>
+        {/* Info Grid */}
+        <div className="space-y-2.5 text-[11px]">
+          {/* Address */}
+          <div className="flex gap-2">
+            <span className="text-blue-500 shrink-0 mt-0.5 text-sm">📍</span>
+            <p className="text-slate-700 font-medium leading-snug">{address}</p>
+          </div>
 
-           <div className="flex items-start gap-2 pt-1 border-t border-slate-50">
-              <span className="text-slate-400 mt-0.5">🌐</span>
-              <div className="flex flex-col flex-1 font-mono text-[9px] text-slate-500">
-                <span>Lat: {loc.latitude.toFixed(6)}</span>
-                <span>Lng: {loc.longitude.toFixed(6)}</span>
-              </div>
-           </div>
+          {/* Coordinates */}
+          <div className="flex gap-2 items-center">
+            <span className="text-blue-500 shrink-0 text-sm">🌐</span>
+            <div className="flex gap-3 font-mono text-[10px] text-slate-500 bg-slate-50 rounded-lg px-2 py-1 flex-1">
+              <span>{loc.latitude.toFixed(6)}</span>
+              <span className="text-slate-300">|</span>
+              <span>{loc.longitude.toFixed(6)}</span>
+            </div>
+          </div>
 
-           <div className="flex items-start gap-2 pt-1 border-t border-slate-50">
-              <span className="text-slate-400 mt-0.5">📊</span>
-              <div className="flex-1">
-                <span className="font-medium text-slate-700 block">{historyCount} sync(s) today</span>
-                <span className="text-[9px] text-slate-400">
-                  {timeAgoMinutes < 1 ? 'Just now' : timeAgoMinutes < 60 ? `${timeAgoMinutes} min ago` : `${Math.floor(timeAgoMinutes / 60)}h ${timeAgoMinutes % 60}m ago`}
-                </span>
-              </div>
-           </div>
+          {/* Device */}
+          <div className="flex gap-2 items-start">
+            <span className="text-blue-500 shrink-0 text-sm">💻</span>
+            <div>
+              <span className="font-semibold text-slate-700 block">{getDeviceName(loc.device_info)}</span>
+              <span className="text-[9px] text-slate-400 block truncate max-w-[200px]" title={loc.device_info || ''}>
+                {loc.device_info || 'Tidak ada data'}
+              </span>
+            </div>
+          </div>
+
+          {/* Sync Stats */}
+          <div className="flex gap-2 items-center pt-2 border-t border-slate-100">
+            <span className="text-blue-500 shrink-0 text-sm">📊</span>
+            <div className="flex items-center gap-2 flex-1">
+              <span className="font-semibold text-slate-700">{historyCount} sync hari ini</span>
+              <span className="text-slate-300">·</span>
+              <span className="text-slate-500">{timeAgo(loc.last_updated)}</span>
+            </div>
+          </div>
         </div>
       </div>
     </Popup>
@@ -144,7 +169,6 @@ export default function MapComponent({ adminEmail }: { adminEmail: string }) {
             uniqueUsers.set(loc.user_id, loc)
           }
         })
-        
         setLocations(Array.from(uniqueUsers.values()))
       } catch (err: any) {
         console.error('Error fetching locations:', err)
@@ -156,54 +180,50 @@ export default function MapComponent({ adminEmail }: { adminEmail: string }) {
 
     const fetchHistory = async () => {
       try {
-        // Get today's history for daily trail
         const todayStart = new Date()
         todayStart.setHours(0, 0, 0, 0)
-
         const { data, error } = await supabase
           .from('location_history')
           .select('id, latitude, longitude, sync_status, recorded_at')
           .gte('recorded_at', todayStart.toISOString())
-          .gt('latitude', 0) // Only valid coordinates
+          .gt('latitude', 0)
           .order('recorded_at', { ascending: true })
-        
-        if (error) {
-          console.warn('History table may not exist yet:', error.message)
-          return
-        }
-
+        if (error) { console.warn('History table may not exist yet:', error.message); return }
         setHistory(data || [])
-      } catch (err) {
-        console.warn('History fetch failed:', err)
-      }
+      } catch (err) { console.warn('History fetch failed:', err) }
     }
 
     fetchLocations()
     fetchHistory()
 
-    // Realtime subscription
     const channel = supabase
       .channel('location-updates')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'user_locations' },
-        () => { fetchLocations(); fetchHistory(); }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_locations' }, () => { fetchLocations(); fetchHistory() })
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
   }, [])
 
+  // ── Loading State ────────────────────────────────────────
   if (loading) return (
-    <div className="flex h-full w-full items-center justify-center bg-slate-900 text-slate-400 animate-pulse">
-       Loading radar data...
+    <div className="flex h-full w-full items-center justify-center bg-slate-950">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-blue-600/20 flex items-center justify-center animate-pulse">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2">
+            <circle cx="12" cy="10" r="3"/><path d="M12 2a8 8 0 0 0-8 8c0 5.4 7 12 8 12s8-6.6 8-12a8 8 0 0 0-8-8z"/>
+          </svg>
+        </div>
+        <span className="text-sm text-slate-400 font-medium">Memuat peta...</span>
+      </div>
     </div>
   )
   
+  // ── Error State ──────────────────────────────────────────
   if (error) return (
-    <div className="flex h-full w-full items-center justify-center bg-slate-900 p-6">
-       <div className="bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl p-4 text-sm max-w-md text-center">
-          Connection Error: {error}
+    <div className="flex h-full w-full items-center justify-center bg-slate-950 p-6">
+       <div className="bg-red-500/10 border border-red-500/20 text-red-400 rounded-2xl p-6 text-sm max-w-md text-center">
+          <p className="font-bold mb-1">Koneksi Gagal</p>
+          <p className="text-red-400/70 text-xs">{error}</p>
        </div>
     </div>
   )
@@ -212,43 +232,52 @@ export default function MapComponent({ adminEmail }: { adminEmail: string }) {
     ? [locations[0].latitude, locations[0].longitude] 
     : [-6.200000, 106.816666]
 
-  // Build polyline from today's history
   const trailPositions: [number, number][] = history
     .filter(h => h.latitude !== 0 && h.longitude !== 0)
     .map(h => [h.latitude, h.longitude] as [number, number])
 
   const todaySyncCount = history.length
   const failedSyncs = history.filter(h => h.sync_status === 'FAILED').length
+  const successRate = todaySyncCount > 0 ? Math.round(((todaySyncCount - failedSyncs) / todaySyncCount) * 100) : 0
 
   return (
     <div className="h-full w-full relative">
+       {/* Custom popup and leaflet styles */}
        <style dangerouslySetInnerHTML={{__html: `
         .leaflet-popup-content-wrapper {
-           border-radius: 16px;
-           box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-           border: 1px solid rgba(226, 232, 240, 0.8);
+           border-radius: 16px !important;
+           padding: 0 !important;
+           box-shadow: 0 20px 40px -8px rgba(0, 0, 0, 0.15), 0 4px 12px -2px rgba(0, 0, 0, 0.08) !important;
+           border: 1px solid rgba(226, 232, 240, 0.6) !important;
+           overflow: hidden;
         }
-        .leaflet-popup-tip { box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); }
-        .leaflet-container { font-family: inherit; }
+        .leaflet-popup-content { margin: 0 !important; }
+        .leaflet-popup-tip { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important; }
+        .leaflet-container { font-family: 'Inter', system-ui, sans-serif; }
+        .leaflet-control-zoom { border-radius: 12px !important; overflow: hidden; border: none !important; box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important; }
+        .leaflet-control-zoom a { width: 36px !important; height: 36px !important; line-height: 36px !important; font-size: 16px !important; color: #334155 !important; border-color: #e2e8f0 !important; }
+        .leaflet-control-zoom a:hover { background: #f1f5f9 !important; }
       `}} />
 
       <MapContainer 
         center={defaultCenter} 
-        zoom={14} 
+        zoom={16} 
         scrollWheelZoom={true} 
-        zoomControl={false}
+        zoomControl={true}
         style={{ height: '100%', width: '100%', zIndex: 0 }}
       >
+        {/* ── OpenStreetMap Tiles (detailed street names) ── */}
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          maxZoom={19}
         />
 
         {/* History Trail Polyline */}
         {trailPositions.length > 1 && (
           <Polyline
             positions={trailPositions}
-            pathOptions={{ color: '#3b82f6', weight: 3, opacity: 0.6, dashArray: '8 4' }}
+            pathOptions={{ color: '#3b82f6', weight: 3, opacity: 0.5, dashArray: '10 6' }}
           />
         )}
 
@@ -260,72 +289,78 @@ export default function MapComponent({ adminEmail }: { adminEmail: string }) {
         ))}
       </MapContainer>
       
-      {/* Floating Info Panel */}
-      <div className="absolute bottom-6 left-4 right-4 md:auto md:top-24 md:left-6 md:right-auto md:w-80 
-                      bg-white/90 backdrop-blur-md p-5 rounded-2xl shadow-xl border border-white/50 z-[1000] 
-                      transition-all hover:shadow-2xl flex flex-col max-h-[40vh] md:max-h-[70vh]">
+      {/* ── Floating Info Panel ──────────────────────────── */}
+      <div className="absolute bottom-4 left-3 right-3 
+                      md:top-20 md:bottom-auto md:left-4 md:right-auto md:w-[320px]
+                      bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-200/60 z-[1000]
+                      flex flex-col max-h-[38vh] md:max-h-[75vh] overflow-hidden">
         
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3 shrink-0">
-           <h3 className="font-bold text-slate-800 text-sm">Sync Dashboard</h3>
-           <div className="flex items-center gap-2 bg-green-50 text-green-600 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-              LIVE
-           </div>
-        </div>
+        {/* Panel Header */}
+        <div className="px-4 pt-4 pb-3 border-b border-slate-100 shrink-0">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-bold text-slate-800 text-[13px]">Monitoring Panel</h3>
+            <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-600 px-2 py-1 rounded-full text-[9px] font-bold tracking-widest uppercase">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              Live
+            </div>
+          </div>
 
-        {/* Stats Row */}
-        <div className="grid grid-cols-3 gap-2 mb-4 shrink-0">
-          <div className="bg-blue-50 rounded-xl p-2.5 text-center">
-            <div className="text-lg font-bold text-blue-600">{locations.length}</div>
-            <div className="text-[9px] font-semibold text-blue-400 uppercase tracking-wider">Devices</div>
-          </div>
-          <div className="bg-emerald-50 rounded-xl p-2.5 text-center">
-            <div className="text-lg font-bold text-emerald-600">{todaySyncCount}</div>
-            <div className="text-[9px] font-semibold text-emerald-400 uppercase tracking-wider">Syncs</div>
-          </div>
-          <div className="bg-rose-50 rounded-xl p-2.5 text-center">
-            <div className="text-lg font-bold text-rose-500">{failedSyncs}</div>
-            <div className="text-[9px] font-semibold text-rose-400 uppercase tracking-wider">Failed</div>
+          {/* Stats Cards */}
+          <div className="grid grid-cols-3 gap-1.5">
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100/60 rounded-xl p-2 text-center">
+              <div className="text-base font-extrabold text-blue-600">{locations.length}</div>
+              <div className="text-[8px] font-bold text-blue-400 uppercase tracking-widest">Device</div>
+            </div>
+            <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/60 rounded-xl p-2 text-center">
+              <div className="text-base font-extrabold text-emerald-600">{todaySyncCount}</div>
+              <div className="text-[8px] font-bold text-emerald-400 uppercase tracking-widest">Sync</div>
+            </div>
+            <div className="bg-gradient-to-br from-amber-50 to-amber-100/60 rounded-xl p-2 text-center">
+              <div className="text-base font-extrabold text-amber-600">{successRate}%</div>
+              <div className="text-[8px] font-bold text-amber-400 uppercase tracking-widest">Sukses</div>
+            </div>
           </div>
         </div>
 
         {/* User List */}
-        <div className="space-y-3 overflow-y-auto pr-1">
+        <div className="px-3 py-2 overflow-y-auto flex-1">
           {locations.map(loc => {
-             const timeAgoMinutes = Math.floor((Date.now() - new Date(loc.last_updated).getTime()) / 60000)
-             let statusColor = "bg-green-500"
-             let statusText = "Active"
-             if (timeAgoMinutes > 20) { statusColor = "bg-yellow-500"; statusText = "Idle" }
-             if (timeAgoMinutes > 60) { statusColor = "bg-red-400"; statusText = "Offline" }
+             const minutes = Math.floor((Date.now() - new Date(loc.last_updated).getTime()) / 60000)
+             let statusColor = 'bg-green-500'
+             let statusLabel = 'Aktif'
+             let statusBg = 'bg-green-50 text-green-700'
+             if (minutes > 20) { statusColor = 'bg-yellow-400'; statusLabel = 'Idle'; statusBg = 'bg-yellow-50 text-yellow-700' }
+             if (minutes > 60) { statusColor = 'bg-red-400'; statusLabel = 'Offline'; statusBg = 'bg-red-50 text-red-600' }
 
              return (
-              <div key={loc.user_id} className="flex items-start gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors group">
-                 <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200 group-hover:border-blue-200 transition-colors">
-                    <div className={`w-2.5 h-2.5 rounded-full ${statusColor}`}></div>
+              <div key={loc.user_id} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50 transition-all cursor-pointer group mb-1">
+                 <div className="relative shrink-0">
+                   <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center border border-slate-200 group-hover:border-blue-300 transition-colors">
+                     <span className="text-[11px] font-bold text-slate-500">{loc.user_id.substring(0, 2).toUpperCase()}</span>
+                   </div>
+                   <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full ${statusColor} ring-2 ring-white`}></span>
                  </div>
                  <div className="flex flex-col flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <span className="font-semibold text-xs text-slate-800 truncate">
-                        {loc.user_id.split('-')[0]}
+                      <span className="font-semibold text-[11px] text-slate-800 truncate">
+                        Device #{loc.user_id.split('-')[0]}
                       </span>
-                      <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${
-                        statusText === 'Active' ? 'bg-green-100 text-green-700' : 
-                        statusText === 'Idle' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-600'
-                      }`}>{statusText}</span>
+                      <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-md ${statusBg}`}>{statusLabel}</span>
                     </div>
-                    <span className="text-[10px] text-slate-500 mt-0.5">
-                       {timeAgoMinutes < 1 ? 'Synced just now' : `${timeAgoMinutes} min ago`}
+                    <span className="text-[10px] text-slate-400 mt-0.5 truncate">
+                      {getDeviceName(loc.device_info)} · {timeAgo(loc.last_updated)}
                     </span>
                  </div>
               </div>
              )
           })}
           {locations.length === 0 && (
-            <div className="flex flex-col items-center justify-center p-6 text-center opacity-60">
-               <span className="text-3xl mb-2">📡</span>
-               <span className="text-xs text-slate-500 font-medium">No signals detected yet.</span>
-               <span className="text-[9px] text-slate-400 mt-1">Waiting for first sync pulse...</span>
+            <div className="flex flex-col items-center justify-center p-8 text-center">
+               <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mb-3">
+                 <span className="text-2xl">📡</span>
+               </div>
+               <span className="text-xs text-slate-500 font-semibold">Belum ada sinyal.</span>
+               <span className="text-[10px] text-slate-400 mt-1">Menunggu sync pulse pertama...</span>
             </div>
           )}
         </div>

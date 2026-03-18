@@ -2,8 +2,8 @@ import './globals.css'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Campus Admin',
-  description: 'Campus Admin Location Tracking Dashboard',
+  title: "CampusRadar — Live Location Dashboard",
+  description: "Real-time location monitoring dashboard for Praishe's Campus PWA",
 }
 
 export default function RootLayout({
@@ -13,7 +13,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+      </head>
+      <body style={{ fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}>
+        {children}
+      </body>
     </html>
   )
 }
