@@ -291,7 +291,7 @@ export default function MapComponent({ adminEmail }: { adminEmail: string }) {
       
       {/* ── Floating Info Panel ──────────────────────────── */}
       <div className="absolute bottom-4 left-3 right-3 
-                      md:top-20 md:bottom-auto md:left-4 md:right-auto md:w-[320px]
+                      md:top-4 md:bottom-auto md:left-4 md:right-auto md:w-[320px]
                       bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-200/60 z-[1000]
                       flex flex-col max-h-[38vh] md:max-h-[75vh] overflow-hidden">
         
