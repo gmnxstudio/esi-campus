@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 
-const TRACKING_INTERVAL = 5 * 60 * 1000 // 5 minutes
+const TRACKING_INTERVAL = 5 * 1000 // 5 seconds
 const SYNC_API = '/api/location/sync'
 const DEVICE_ID_KEY = 'praishe_device_id'
 
