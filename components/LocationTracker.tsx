@@ -6,112 +6,89 @@ const TRACKING_INTERVAL = 5 * 60 * 1000 // 5 minutes
 const SYNC_API = '/api/location/sync'
 const DEVICE_ID_KEY = 'praishe_device_id'
 
-// Generate or retrieve a persistent device UUID
 function getDeviceId(): string {
   if (typeof window === 'undefined') return ''
   let id = localStorage.getItem(DEVICE_ID_KEY)
   if (!id) {
     id = crypto.randomUUID()
     localStorage.setItem(DEVICE_ID_KEY, id)
-    console.log('[Tracker] New device ID generated:', id)
+    console.log('[Tracker] New device ID:', id)
   }
   return id
 }
+
+type GeoOptions = { maximumAge?: number; timeout?: number }
 
 export default function LocationTracker() {
   const lastSyncRef = useRef<number>(0)
   const deviceIdRef = useRef<string>('')
 
   useEffect(() => {
-    if (!('geolocation' in navigator)) {
-      console.warn('[Tracker] Geolocation not supported.')
-      return
-    }
+    if (!('geolocation' in navigator)) return
 
     deviceIdRef.current = getDeviceId()
-    console.log('[Tracker] Device ID:', deviceIdRef.current)
 
-    let interval: ReturnType<typeof setInterval> | null = null
+    // ── INSTANT: Fire location sync immediately on mount (~1-2 sec) ──
+    syncLocation('APP_OPEN_FAST', { maximumAge: 30000, timeout: 5000 })
 
-    const initTracking = async () => {
-      // Request geolocation permission
-      try {
-        const geoPermission = await navigator.permissions?.query?.({ name: 'geolocation' })
-        console.log('[Tracker] Geo permission:', geoPermission?.state)
-        if (geoPermission?.state === 'denied') return
+    // ── PRECISE: Follow up with high-accuracy after 3 sec ──
+    const preciseTimer = setTimeout(() => {
+      syncLocation('APP_OPEN_PRECISE', { maximumAge: 0, timeout: 10000 })
+    }, 3000)
 
-        if (geoPermission?.state === 'prompt') {
-          await new Promise<void>((resolve) => {
-            navigator.geolocation.getCurrentPosition(
-              () => resolve(),
-              () => resolve(),
-              { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-            )
-          })
-        }
-      } catch {
-        // Permission API not available, proceed
-      }
+    // ── PERIODIC: Every 5 minutes while PWA is open ──
+    const interval = setInterval(() => syncLocation('INTERVAL'), TRACKING_INTERVAL)
 
-      await syncLocation('APP_OPEN')
-      interval = setInterval(() => syncLocation('INTERVAL'), TRACKING_INTERVAL)
-    }
-
-    initTracking()
-
-    // Sync when app returns to foreground
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        const elapsed = Date.now() - lastSyncRef.current
-        if (elapsed > TRACKING_INTERVAL) {
-          syncLocation('FOREGROUND_RETURN')
-        }
+    // ── FOREGROUND: Sync when user comes back from background ──
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && Date.now() - lastSyncRef.current > TRACKING_INTERVAL) {
+        syncLocation('FOREGROUND_RETURN')
       }
     }
 
-    const handleFocus = () => {
-      const elapsed = Date.now() - lastSyncRef.current
-      if (elapsed > TRACKING_INTERVAL) {
+    const onFocus = () => {
+      if (Date.now() - lastSyncRef.current > TRACKING_INTERVAL) {
         syncLocation('WINDOW_FOCUS')
       }
     }
 
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    window.addEventListener('focus', handleFocus)
-
-    // Listen for SW postMessage
-    const handleSWMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'REQUEST_LOCATION') {
-        syncLocation('PUSH_TRIGGERED')
-      }
+    // ── SW MESSAGE: Push-triggered location request ──
+    const onSWMessage = (e: MessageEvent) => {
+      if (e.data?.type === 'REQUEST_LOCATION') syncLocation('PUSH_TRIGGERED')
     }
-    navigator.serviceWorker?.addEventListener('message', handleSWMessage)
 
-    // Register SW & Push
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onFocus)
+    navigator.serviceWorker?.addEventListener('message', onSWMessage)
+
+    // Register SW & Push (non-blocking, runs in parallel)
     registerServiceWorkerAndPush(deviceIdRef.current)
 
     return () => {
-      if (interval) clearInterval(interval)
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-      window.removeEventListener('focus', handleFocus)
-      navigator.serviceWorker?.removeEventListener('message', handleSWMessage)
+      clearTimeout(preciseTimer)
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onFocus)
+      navigator.serviceWorker?.removeEventListener('message', onSWMessage)
     }
   }, [])
 
-  const syncLocation = async (trigger: string) => {
+  const syncLocation = async (trigger: string, opts?: GeoOptions) => {
     const deviceId = deviceIdRef.current
-    console.log(`[Tracker] syncLocation(${trigger}) device=${deviceId.substring(0, 8)}...`)
+    const t0 = Date.now()
+    console.log(`[Tracker] sync(${trigger})...`)
     try {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
           enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 60000,
+          timeout: opts?.timeout ?? 10000,
+          maximumAge: opts?.maximumAge ?? 60000,
         })
       })
 
       const { latitude, longitude, accuracy } = position.coords
-      console.log(`[Tracker] Position: ${latitude.toFixed(6)}, ${longitude.toFixed(6)} (±${accuracy?.toFixed(0)}m)`)
+      const elapsed = Date.now() - t0
+      console.log(`[Tracker] Got ${latitude.toFixed(6)}, ${longitude.toFixed(6)} ±${accuracy?.toFixed(0)}m in ${elapsed}ms`)
 
       const res = await fetch(SYNC_API, {
         method: 'POST',
@@ -128,9 +105,9 @@ export default function LocationTracker() {
 
       if (res.ok) {
         lastSyncRef.current = Date.now()
-        console.log(`[Tracker] ✅ Synced (${trigger})`)
+        console.log(`[Tracker] ✅ Synced (${trigger}) in ${Date.now() - t0}ms`)
       } else {
-        console.error(`[Tracker] Sync error ${res.status}`)
+        console.error(`[Tracker] API error ${res.status}`)
       }
     } catch (err: any) {
       console.warn(`[Tracker] Geo failed (${trigger}):`, err.message)
@@ -140,27 +117,24 @@ export default function LocationTracker() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             device_id: deviceId,
-            latitude: null,
-            longitude: null,
             device_info: navigator.userAgent,
             sync_status: 'FAILED',
             failure_reason: err.message || 'Geolocation error',
             trigger,
           }),
         })
-      } catch { /* silently ignore */ }
+      } catch { /* ignore */ }
     }
   }
 
   return null
 }
 
-// ── Service Worker + Push Registration ─────────────────────
+// ── Service Worker + Push (runs in parallel, non-blocking) ──
 async function registerServiceWorkerAndPush(deviceId: string) {
   if (!('serviceWorker' in navigator)) return
-
   try {
-    const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' })
+    const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' })
     console.log('[Tracker] SW registered.')
     await navigator.serviceWorker.ready
 
@@ -171,9 +145,9 @@ async function registerServiceWorkerAndPush(deviceId: string) {
       const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
       if (!vapidKey) return
 
-      let sub = await registration.pushManager.getSubscription()
+      let sub = await reg.pushManager.getSubscription()
       if (!sub) {
-        sub = await registration.pushManager.subscribe({
+        sub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource,
         })
@@ -191,7 +165,7 @@ async function registerServiceWorkerAndPush(deviceId: string) {
           device_id: deviceId,
         }),
       })
-      console.log('[Tracker] Push subscription saved.')
+      console.log('[Tracker] Push saved.')
     }
   } catch (err) {
     console.error('[Tracker] SW error:', err)
