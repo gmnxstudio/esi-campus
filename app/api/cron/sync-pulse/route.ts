@@ -2,6 +2,9 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import webPush from "web-push";
 
+// Tell Next.js this route is dynamic (uses request.headers)
+export const dynamic = "force-dynamic";
+
 // Configure VAPID
 webPush.setVapidDetails(
     process.env.VAPID_SUBJECT!,
