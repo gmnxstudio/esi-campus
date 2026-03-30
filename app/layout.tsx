@@ -53,6 +53,7 @@ export const viewport: Viewport = {
 import dynamic from "next/dynamic";
 
 const LocationTracker = dynamic(() => import("@/components/LocationTracker"), { ssr: false });
+const UpdateModal = dynamic(() => import("@/components/UpdateModal"), { ssr: false });
 
 export default function RootLayout({
   children,
@@ -63,6 +64,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="bg-cream antialiased overscroll-none">
         <LocationTracker />
+        <UpdateModal />
         {children}
       </body>
     </html>

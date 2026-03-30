@@ -14,6 +14,39 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 })
 
+// Color palette for multi-user markers
+const MARKER_COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316']
+
+function getMarkerColor(userId: string): string {
+  let hash = 0
+  for (let i = 0; i < userId.length; i++) {
+    hash = userId.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  return MARKER_COLORS[Math.abs(hash) % MARKER_COLORS.length]
+}
+
+function createColoredIcon(color: string) {
+  return L.divIcon({
+    className: 'custom-marker',
+    html: `<div style="
+      width: 28px; height: 28px;
+      background: ${color};
+      border: 3px solid white;
+      border-radius: 50% 50% 50% 0;
+      transform: rotate(-45deg);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    "><div style="
+      width: 10px; height: 10px;
+      background: white;
+      border-radius: 50%;
+      margin: 6px auto;
+    "></div></div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 28],
+    popupAnchor: [0, -28],
+  })
+}
+
 type UserLocation = {
   id: string
   user_id: string
@@ -283,7 +316,7 @@ export default function MapComponent({ adminEmail }: { adminEmail: string }) {
 
         {/* Current Location Markers */}
         {locations.map((loc) => (
-          <Marker key={loc.id} position={[loc.latitude, loc.longitude]}>
+          <Marker key={loc.id} position={[loc.latitude, loc.longitude]} icon={createColoredIcon(getMarkerColor(loc.user_id))}>
             <SmartPopup loc={loc} historyCount={todaySyncCount} />
           </Marker>
         ))}

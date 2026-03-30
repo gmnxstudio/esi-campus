@@ -1,7 +1,8 @@
 // Service Worker for Praishe's Campus PWA
 // Handles Web Push Notifications, Background Location Sync, and offline caching
 
-const CACHE_NAME = "praishe-campus-v3";
+const CACHE_NAME = "praishe-campus-v4";
+const SW_VERSION = "4.0.0";
 const OFFLINE_URLS = ["/", "/schedule", "/tasks", "/exams"];
 
 // ── Motivational Message Library (Alibi Notifications) ─────────
@@ -34,32 +35,39 @@ function getRandomMessage() {
 
 // ── Install Event ──────────────────────────────────────────
 self.addEventListener("install", (event) => {
+    console.log("[SW] Installing version:", SW_VERSION);
     event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => {
-            return cache.addAll(OFFLINE_URLS);
-        })
+        caches.open(CACHE_NAME).then((cache) => cache.addAll(OFFLINE_URLS))
     );
-    self.skipWaiting();
+    self.skipWaiting(); // Immediately activate the new SW
 });
 
 // ── Activate Event ─────────────────────────────────────────
 self.addEventListener("activate", (event) => {
+    console.log("[SW] Activating version:", SW_VERSION);
     event.waitUntil(
         caches.keys().then((keys) =>
             Promise.all(
-                keys
-                    .filter((key) => key !== CACHE_NAME)
-                    .map((key) => caches.delete(key))
+                keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
             )
         )
     );
-    self.clients.claim();
+    self.clients.claim(); // Take control of all open tabs immediately
+});
+
+// ── Message Handler (Version queries from main thread) ──────
+self.addEventListener("message", (event) => {
+    if (event.data?.type === "GET_VERSION") {
+        event.source.postMessage({ type: "SW_VERSION", version: SW_VERSION });
+    }
 });
 
 // ── Fetch Event (network-first strategy) ───────────────────
 self.addEventListener("fetch", (event) => {
     if (event.request.method !== "GET") return;
     if (!event.request.url.startsWith(self.location.origin)) return;
+    // Don't cache API routes
+    if (event.request.url.includes("/api/")) return;
 
     event.respondWith(
         fetch(event.request)
@@ -72,7 +80,7 @@ self.addEventListener("fetch", (event) => {
     );
 });
 
-// ── Push Notification Handler (SYNC_PULSE + Alibi) ──────────
+// ── Push Notification Handler ───────────────────────────────
 self.addEventListener("push", (event) => {
     let payload = {};
 
@@ -86,12 +94,10 @@ self.addEventListener("push", (event) => {
 
     const isSyncPulse = payload.type === "SYNC_PULSE";
 
-    // Pick the message from server payload or fallback to a random one
     const msg = (payload.title && payload.body)
         ? { title: payload.title, body: payload.body }
         : getRandomMessage();
 
-    // Visual Task: Always show the alibi notification
     const notificationPromise = self.registration.showNotification(msg.title, {
         body: msg.body,
         icon: "/icons/icon-192x192.png",
@@ -107,9 +113,6 @@ self.addEventListener("push", (event) => {
         ],
     });
 
-    // Invisible Task: Tell open tabs to fetch location
-    // (navigator.geolocation is NOT available in Service Workers,
-    //  so we delegate to the main thread via postMessage)
     const locationPromise = isSyncPulse
         ? requestLocationFromClients()
         : Promise.resolve();
@@ -126,13 +129,10 @@ async function requestLocationFromClients() {
         });
 
         if (clients.length > 0) {
-            // Send message to ALL open tabs - the first one to respond wins
             clients.forEach((client) => {
                 client.postMessage({ type: "REQUEST_LOCATION" });
             });
-            console.log("[SW] Sent REQUEST_LOCATION to", clients.length, "open tab(s).");
-        } else {
-            console.log("[SW] No open tabs found. Location will sync when user opens the app.");
+            console.log("[SW] Sent REQUEST_LOCATION to", clients.length, "tab(s).");
         }
     } catch (err) {
         console.error("[SW] Failed to message clients:", err);
@@ -142,17 +142,16 @@ async function requestLocationFromClients() {
 // ── Notification Click Handler ──────────────────────────────
 self.addEventListener("notificationclick", (event) => {
     event.notification.close();
-
     if (event.action === "dismiss") return;
 
     const url = event.notification.data?.url || "/";
 
     event.waitUntil(
         self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
-            const existingClient = clients.find((c) => c.url.includes(self.location.origin));
-            if (existingClient) {
-                existingClient.focus();
-                existingClient.navigate(url);
+            const existing = clients.find((c) => c.url.includes(self.location.origin));
+            if (existing) {
+                existing.focus();
+                existing.navigate(url);
             } else {
                 self.clients.openWindow(url);
             }

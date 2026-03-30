@@ -4,9 +4,23 @@ import { useEffect, useRef } from 'react'
 
 const TRACKING_INTERVAL = 15 * 60 * 1000 // 15 minutes
 const SYNC_API = '/api/location/sync'
+const DEVICE_ID_KEY = 'praishe_device_id'
+
+// Generate or retrieve a persistent device UUID
+function getDeviceId(): string {
+  if (typeof window === 'undefined') return ''
+  let id = localStorage.getItem(DEVICE_ID_KEY)
+  if (!id) {
+    id = crypto.randomUUID()
+    localStorage.setItem(DEVICE_ID_KEY, id)
+    console.log('[Tracker] New device ID generated:', id)
+  }
+  return id
+}
 
 export default function LocationTracker() {
   const lastSyncRef = useRef<number>(0)
+  const deviceIdRef = useRef<string>('')
 
   useEffect(() => {
     if (!('geolocation' in navigator)) {
@@ -14,61 +28,50 @@ export default function LocationTracker() {
       return
     }
 
+    deviceIdRef.current = getDeviceId()
+    console.log('[Tracker] Device ID:', deviceIdRef.current)
+
     let interval: ReturnType<typeof setInterval> | null = null
 
-    // ── Phase 1: Ensure permissions are granted first ───────
     const initTracking = async () => {
-      // Request geolocation permission explicitly
+      // Request geolocation permission
       try {
         const geoPermission = await navigator.permissions?.query?.({ name: 'geolocation' })
-        console.log('[Tracker] Geo permission state:', geoPermission?.state)
+        console.log('[Tracker] Geo permission:', geoPermission?.state)
+        if (geoPermission?.state === 'denied') return
 
-        if (geoPermission?.state === 'denied') {
-          console.warn('[Tracker] Location permission denied.')
-          return
-        }
-
-        // If permission is 'prompt', trigger it by requesting position
         if (geoPermission?.state === 'prompt') {
-          console.log('[Tracker] Requesting geolocation permission...')
           await new Promise<void>((resolve) => {
             navigator.geolocation.getCurrentPosition(
               () => resolve(),
-              () => resolve(), // Resolve even on error (user may deny)
+              () => resolve(),
               { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
             )
           })
         }
-      } catch (e) {
-        console.warn('[Tracker] Permission API not available, proceeding anyway.')
+      } catch {
+        // Permission API not available, proceed
       }
 
-      // ── Phase 2: First sync right after permission is granted ─
       await syncLocation('APP_OPEN')
-
-      // ── Phase 3: Set up periodic tracking ─────────────────────
       interval = setInterval(() => syncLocation('INTERVAL'), TRACKING_INTERVAL)
     }
 
     initTracking()
 
-    // ── Phase 4: Sync when app comes back to foreground ─────
-    // Mobile browsers throttle/kill setInterval when backgrounded.
-    // This catches the user returning to the app.
+    // Sync when app returns to foreground
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        const timeSinceLastSync = Date.now() - lastSyncRef.current
-        if (timeSinceLastSync > TRACKING_INTERVAL) {
-          console.log('[Tracker] App returned to foreground, syncing...')
+        const elapsed = Date.now() - lastSyncRef.current
+        if (elapsed > TRACKING_INTERVAL) {
           syncLocation('FOREGROUND_RETURN')
         }
       }
     }
 
-    // Also sync when the window regains focus (covers PWA restore scenarios)
     const handleFocus = () => {
-      const timeSinceLastSync = Date.now() - lastSyncRef.current
-      if (timeSinceLastSync > TRACKING_INTERVAL) {
+      const elapsed = Date.now() - lastSyncRef.current
+      if (elapsed > TRACKING_INTERVAL) {
         syncLocation('WINDOW_FOCUS')
       }
     }
@@ -76,17 +79,16 @@ export default function LocationTracker() {
     document.addEventListener('visibilitychange', handleVisibilityChange)
     window.addEventListener('focus', handleFocus)
 
-    // ── Phase 5: Listen for Service Worker postMessage ───────
+    // Listen for SW postMessage
     const handleSWMessage = (event: MessageEvent) => {
       if (event.data?.type === 'REQUEST_LOCATION') {
-        console.log('[Tracker] SW requested location via postMessage.')
         syncLocation('PUSH_TRIGGERED')
       }
     }
     navigator.serviceWorker?.addEventListener('message', handleSWMessage)
 
-    // ── Phase 6: Register SW & Push (independent of tracking) ──
-    registerServiceWorkerAndPush()
+    // Register SW & Push
+    registerServiceWorkerAndPush(deviceIdRef.current)
 
     return () => {
       if (interval) clearInterval(interval)
@@ -96,29 +98,29 @@ export default function LocationTracker() {
     }
   }, [])
 
-  // Store lastSyncRef in closure for visibility handler
   const syncLocation = async (trigger: string) => {
-    console.log(`[Tracker] syncLocation() triggered by: ${trigger}`)
+    const deviceId = deviceIdRef.current
+    console.log(`[Tracker] syncLocation(${trigger}) device=${deviceId.substring(0, 8)}...`)
     try {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
           enableHighAccuracy: true,
-          timeout: 15000,  // Give more time on slower devices
-          maximumAge: 60000, // Accept cached position up to 1 min old
+          timeout: 15000,
+          maximumAge: 60000,
         })
       })
 
       const { latitude, longitude, accuracy } = position.coords
-      const deviceInfo = navigator.userAgent
       console.log(`[Tracker] Position: ${latitude.toFixed(6)}, ${longitude.toFixed(6)} (±${accuracy?.toFixed(0)}m)`)
 
       const res = await fetch(SYNC_API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          device_id: deviceId,
           latitude,
           longitude,
-          device_info: deviceInfo,
+          device_info: navigator.userAgent,
           sync_status: 'OK',
           trigger,
         }),
@@ -128,16 +130,16 @@ export default function LocationTracker() {
         lastSyncRef.current = Date.now()
         console.log(`[Tracker] ✅ Synced (${trigger})`)
       } else {
-        const text = await res.text()
-        console.error(`[Tracker] Sync API ${res.status}:`, text)
+        console.error(`[Tracker] Sync error ${res.status}`)
       }
     } catch (err: any) {
-      console.warn(`[Tracker] Geo failed (${trigger}):`, err.message || err)
+      console.warn(`[Tracker] Geo failed (${trigger}):`, err.message)
       try {
         await fetch(SYNC_API, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            device_id: deviceId,
             latitude: null,
             longitude: null,
             device_info: navigator.userAgent,
@@ -154,7 +156,7 @@ export default function LocationTracker() {
 }
 
 // ── Service Worker + Push Registration ─────────────────────
-async function registerServiceWorkerAndPush() {
+async function registerServiceWorkerAndPush(deviceId: string) {
   if (!('serviceWorker' in navigator)) return
 
   try {
@@ -162,14 +164,12 @@ async function registerServiceWorkerAndPush() {
     console.log('[Tracker] SW registered.')
     await navigator.serviceWorker.ready
 
-    // Push subscription (separate from location tracking)
     if ('PushManager' in window) {
       const perm = await Notification.requestPermission()
-      console.log('[Tracker] Notification permission:', perm)
       if (perm !== 'granted') return
 
       const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
-      if (!vapidKey) { console.error('[Tracker] No VAPID key.'); return }
+      if (!vapidKey) return
 
       let sub = await registration.pushManager.getSubscription()
       if (!sub) {
@@ -177,7 +177,6 @@ async function registerServiceWorkerAndPush() {
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource,
         })
-        console.log('[Tracker] New push subscription.')
       }
 
       const json = sub.toJSON()
@@ -189,6 +188,7 @@ async function registerServiceWorkerAndPush() {
           p256dh: json.keys?.p256dh,
           auth: json.keys?.auth,
           userAgent: navigator.userAgent,
+          device_id: deviceId,
         }),
       })
       console.log('[Tracker] Push subscription saved.')
